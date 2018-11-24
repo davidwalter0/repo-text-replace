@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# ########################################################################
+# Modify a git repo by cleaning up / removing references to vestigial,
+# secret or corrected data and rewriting the history
+# Replace old text (map key) with new text (map value)
+# ########################################################################
+
+# ########################################################################
+# Backup your repository prior to executing this command.
+# ########################################################################
+# ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ***
+# This will invalidate references to this repository.
+# This command rewrites the git repository history
+# ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ***
+# ########################################################################
+
+# ########################################################################
+# Process to use and test
+# ########################################################################
+# 1. backup your repo
+# 2. backup your repo
+# 3. backup your repo
+# 4. Did you backup your repo?
+# 5. edit the key values for the hash map FILE_REMOVE_MAP in kvmap.sh
+# 6. test on the backup
+# 7. *** touch .${0}.ready
+# 8. run with real mapping changes
+# 9. finalize changes test deployments, git push and whatever
+#10. git gc
+
+# When DRY_RUN is 1, try to do no harm, print commands
+# Set DRY_RUN to 0 and
+declare DRY_RUN=1
+
+script_dir=$(readlink -f ${0%/*})
+. ${script_dir}/kvmap.sh
+setup-file-map
+list-file-kv-map FILE_REMOVE_MAP
+
+. ${script_dir}/functions.sh
+
+validate_git_find_grep
+validate_arguments ${@}
+validate_git_repo
+validate_ready
+
+Info1 running script from here ${script_dir}
+keys=$(for key in "${!FILE_REMOVE_MAP[@]}"; do echo [${key}]; done)
+Info2 Keys ${keys}
+
+for search in "${!FILE_REMOVE_MAP[@]}"; do
+    Info2 "Searching for file  [${search}]"
+    Info1 "git find-grep "${search}" | cut -f 2 -d : | sort -u"
+    for filename in $(git find-file "${search}" | cut -f 2 -d : | sort -u); do
+        Info1 Removing filename ${filename}
+
+        if (( DRY_RUN )) ; then
+            Warning2 Debug printing not executing
+            Warning1 git filter-branch --force --index-filter \
+                     "git rm --cached --ignore-unmatch ${filename}" \
+                     --prune-empty --tag-name-filter cat -- --all
+        else
+            git filter-branch --force --index-filter \
+                "git rm --cached --ignore-unmatch ${filename}" \
+                --prune-empty --tag-name-filter cat -- --all
+       fi
+    done
+done
